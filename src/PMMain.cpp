@@ -19,6 +19,8 @@ struct CmdOptions {
     double startpos = 0.0;
     double endpos = 0.0;
     double gravity = 0.0;
+    std::string easeType = ""; // "ease-in", "ease-out", "ease-in-out"
+    double easeParam = 2.0;    // параметр, например, степень кривизны (по умолчанию 2)
 };
 
 CmdOptions parseArguments(int argc, char* argv[]) {
@@ -35,6 +37,10 @@ CmdOptions parseArguments(int argc, char* argv[]) {
             opts.endpos = std::stod(argv[++i]);
         } else if (arg == "-gravity" && i+1 < argc) {
             opts.gravity = std::stod(argv[++i]);
+        } else if (arg == "-ease" && i+1 < argc) {
+            opts.easeType = argv[++i]; // например, "ease-in", "ease-out" или "ease-in-out"
+        } else if (arg == "-easeparam" && i+1 < argc) {
+            opts.easeParam = std::stod(argv[++i]);
         }
     }
     return opts;
@@ -48,13 +54,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // Выполняем симуляцию
+    // Выполняем симуляцию. Если тип easing не пустой, то используется easing-интерполяция,
+    // иначе выполняется физическая симуляция с гравитацией.
     std::vector<double> positions = runSimulation(
         options.steps, 
         options.duration, 
         options.startpos, 
         options.endpos, 
-        options.gravity
+        options.gravity,
+        options.easeType,
+        options.easeParam
     );
     
     // Выводим результат в формате {v1, v2, ...}
