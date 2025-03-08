@@ -43,3 +43,6 @@ build/phymovx -steps <steps> -duration <duration> -startpos <startpos> -endpos <
 
 - `-easeparam <param>`  
   Параметр, определяющий силу функции easing. Это числовое значение, которое влияет на кривизну. По умолчанию используется значение `2.0`.
+
+- `-output <json/css>`
+  Вывести в формате JSON или CSS
