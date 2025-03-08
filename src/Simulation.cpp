@@ -1,88 +1,120 @@
 #include "Simulation.h"
+#include <sstream>
+#include <fstream>
 #include <cmath>
+#include <iostream>
+#include "tinyxml2.h"
 
-// Функции easing
-static double easeIn(double p, double easeParam) {
-    return std::pow(p, easeParam);
-}
+using namespace tinyxml2;
 
-static double easeOut(double p, double easeParam) {
-    return 1.0 - std::pow(1.0 - p, easeParam);
-}
-
-static double easeInOut(double p, double easeParam) {
-    if (p < 0.5)
-        return 0.5 * std::pow(2 * p, easeParam);
-    else
-        return 1.0 - 0.5 * std::pow(2 * (1 - p), easeParam);
-}
-
+// Функция физической симуляции
 std::vector<double> runSimulation(int steps, double duration, double startpos, double endpos, double gravity,
-                                  const std::string& easeType, double easeParam,
                                   double friction, bool collision, double restitution) {
     std::vector<double> positions;
+    double position = startpos;
+    double velocity = 0.0;
+    double deltaTime = duration / steps;
+
+    for (int i = 0; i < steps; ++i) {
+        // Применяем гравитацию
+        velocity += gravity * deltaTime;
+
+        // Применяем трение
+        velocity *= (1 - friction * deltaTime);
+
+        // Обновляем позицию
+        position += velocity * deltaTime;
+
+        // Обработка столкновений (например, с "землёй" на уровне endpos)
+        if (collision && ((startpos > endpos && position < endpos) ||
+                          (startpos < endpos && position > endpos))) {
+            position = endpos;
+            velocity = -velocity * restitution;
+        }
+
+        positions.push_back(position);
+    }
+    return positions;
+}
+
+// Функция генерации CSS-анимации с использованием @keyframes
+std::string generateCssAnimation(const std::vector<double>& positions, double duration, int steps) {
+    std::ostringstream css;
+    
+    css << "@keyframes move {" << std::endl;
+    // Для каждого шага генерируем ключевой кадр; процент вычисляем как i/(steps-1)*100
+    for (int i = 0; i < steps; ++i) {
+        double percent = (static_cast<double>(i) / (steps - 1)) * 100;
+        css << "  " << percent << "% { transform: translateY(" << positions[i] << "px); }" << std::endl;
+    }
+    css << "}" << std::endl;
+    
+    css << "animation: move " << duration << "s linear;" << std::endl;
+    
+    return css.str();
+}
+
+// Функция загрузки ассета из XML-файла (используется tinyxml2)
+std::vector<double> loadAsset(const std::string &filename) {
+    std::vector<double> assetValues;
+    XMLDocument doc;
+    XMLError result = doc.LoadFile(filename.c_str());
+    if (result != XML_SUCCESS) {
+        std::cerr << "Ошибка загрузки XML файла: " << filename << std::endl;
+        return assetValues;
+    }
+    XMLElement* root = doc.FirstChildElement("PMAsset");
+    if (!root) {
+        std::cerr << "Не найден корневой элемент <PMAsset> в " << filename << std::endl;
+        return assetValues;
+    }
+    for (XMLElement* key = root->FirstChildElement("keyframe"); key != nullptr; key = key->NextSiblingElement("keyframe")) {
+        double value = 0.0;
+        key->QueryDoubleText(&value);
+        assetValues.push_back(value);
+    }
+    return assetValues;
+}
+
+// Вспомогательная функция для вычисления среднего значения в диапазоне
+double average(const std::vector<double>& values, int start, int end) {
+    double sum = 0.0;
+    int count = 0;
+    for (int i = start; i <= end; ++i) {
+        sum += values[i];
+        count++;
+    }
+    return (count > 0) ? sum / count : 0.0;
+}
+
+// Генерация анимации на основе ассета
+std::vector<double> runAssetSimulation(const std::vector<double>& assetKeyframes, int steps) {
+    std::vector<double> positions;
+    int m = assetKeyframes.size();
+    if (m == 0) return positions;
     positions.reserve(steps);
 
-    double dt = duration / (steps - 1);
+    for (int i = 0; i < steps; ++i) {
+        double t = static_cast<double>(i) / (steps - 1);
+        if (t <= 0) {
+            positions.push_back(assetKeyframes.front());
+        } else if (t >= 1) {
+            positions.push_back(assetKeyframes.back());
+        } else {
+            // Нормализуем индекс в ассете: index от 0 до m-1
+            double index = t * (m - 1);
+            int idx = static_cast<int>(std::floor(index));
+            double f = index - idx;
 
-    // Режим easing: используется интерполяция между startpos и endpos.
-    if (!easeType.empty()) {
-        for (int i = 0; i < steps; ++i) {
-            double t = dt * i;
-            double p = t / duration;
-            double f = p;
-            if (easeType == "ease-in") {
-                f = easeIn(p, easeParam);
-            } else if (easeType == "ease-out") {
-                f = easeOut(p, easeParam);
-            } else if (easeType == "ease-in-out") {
-                f = easeInOut(p, easeParam);
-            }
-            double pos = startpos + (endpos - startpos) * f;
-            positions.push_back(pos);
+            // Левая группа – от начала до idx
+            double leftMean = average(assetKeyframes, 0, idx);
+            // Правая группа – от idx+1 до конца (если есть)
+            double rightMean = (idx + 1 < m) ? average(assetKeyframes, idx + 1, m - 1) : assetKeyframes.back();
+
+            double outValue = (1 - f) * leftMean + f * rightMean;
+            positions.push_back(outValue);
         }
     }
-    // Если включена фрикция или столкновения, используем интеграционный метод (явный метод Эйлера).
-    else if (friction > 0.0 || collision) {
-        // Вычисляем начальную скорость по формуле для свободного падения (без учета фрикции и столкновений)
-        double T = duration;
-        double v0 = (endpos - startpos - 0.5 * gravity * T * T) / T;
-        double x = startpos;
-        double v = v0;
-        for (int i = 0; i < steps; ++i) {
-            positions.push_back(x);
-            // Расчет ускорения: гравитация плюс трение, которое всегда действует против направления движения
-            double a = gravity;
-            if (v != 0)
-                a += -friction * (v > 0 ? 1.0 : -1.0);
-            
-            // Обновляем скорость и позицию
-            v += a * dt;
-            x += v * dt;
-            
-            // Если включены столкновения, проверяем выход за пределы.
-            // Предполагаем, что если startpos > endpos, то endpos является "полом"
-            if (collision) {
-                if (startpos > endpos && x < endpos) {
-                    x = endpos;
-                    v = -v * restitution;
-                } else if (startpos < endpos && x > endpos) {
-                    x = endpos;
-                    v = -v * restitution;
-                }
-            }
-        }
-    }
-    // Физическая модель без фрикции и столкновений (аналитическое решение)
-    else {
-        double T = duration;
-        double v0 = (endpos - startpos - 0.5 * gravity * T * T) / T;
-        for (int i = 0; i < steps; ++i) {
-            double t = dt * i;
-            double pos = startpos + v0 * t + 0.5 * gravity * t * t;
-            positions.push_back(pos);
-        }
-    }
-    
+
     return positions;
 }
