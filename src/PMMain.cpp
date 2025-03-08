@@ -20,7 +20,11 @@ struct CmdOptions {
     double endpos = 0.0;
     double gravity = 0.0;
     std::string easeType = ""; // "ease-in", "ease-out", "ease-in-out"
-    double easeParam = 2.0;    // параметр, например, степень кривизны (по умолчанию 2)
+    double easeParam = 2.0;    // параметр кривизны easing (по умолчанию 2)
+    
+    double friction = 0.0;     // коэффициент трения (м/с²)
+    bool collision = false;    // включение столкновений
+    double restitution = 1.0;  // коэффициент упругости столкновения
 };
 
 CmdOptions parseArguments(int argc, char* argv[]) {
@@ -38,9 +42,16 @@ CmdOptions parseArguments(int argc, char* argv[]) {
         } else if (arg == "-gravity" && i+1 < argc) {
             opts.gravity = std::stod(argv[++i]);
         } else if (arg == "-ease" && i+1 < argc) {
-            opts.easeType = argv[++i]; // например, "ease-in", "ease-out" или "ease-in-out"
+            opts.easeType = argv[++i]; // "ease-in", "ease-out", "ease-in-out"
         } else if (arg == "-easeparam" && i+1 < argc) {
             opts.easeParam = std::stod(argv[++i]);
+        } else if (arg == "-friction" && i+1 < argc) {
+            opts.friction = std::stod(argv[++i]);
+        } else if (arg == "-collision" && i+1 < argc) {
+            std::string col = argv[++i];
+            opts.collision = (col == "true" || col == "1");
+        } else if (arg == "-restitution" && i+1 < argc) {
+            opts.restitution = std::stod(argv[++i]);
         }
     }
     return opts;
@@ -54,8 +65,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // Выполняем симуляцию. Если тип easing не пустой, то используется easing-интерполяция,
-    // иначе выполняется физическая симуляция с гравитацией.
+    // Выполняем симуляцию:
+    // Если задан режим easing (easeType не пустой), то используется easing-интерполяция.
+    // Если включена фрикция или столкновения, используется интеграция методом Эйлера.
     std::vector<double> positions = runSimulation(
         options.steps, 
         options.duration, 
@@ -63,7 +75,10 @@ int main(int argc, char* argv[]) {
         options.endpos, 
         options.gravity,
         options.easeType,
-        options.easeParam
+        options.easeParam,
+        options.friction,
+        options.collision,
+        options.restitution
     );
     
     // Выводим результат в формате {v1, v2, ...}
