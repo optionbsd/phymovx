@@ -1,4 +1,7 @@
 # PhyMovX
+<p align="center">
+  <img src="logo.png" alt="PhyMovX Logo" width="400">
+</p>
 Альтернатива Core Physics. Симуляция физики для создания естественных анимаций
 
 ## CLI
